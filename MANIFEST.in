@@ -1,0 +1,27 @@
+include README.md
+include LICENSE-APACHE
+include LICENSE-MIT
+include pyproject.toml
+include tox.ini
+include Makefile
+include codecov.yaml
+include .pre-commit-config.yaml
+
+recursive-include subnet *.py
+recursive-include subnet py.typed
+recursive-include tests *.py
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * .DS_Store
+
+recursive-include scripts *
+recursive-include tests *
+
+global-include *.pyi
+
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+prune .tox
+prune venv*
+prune .venv*

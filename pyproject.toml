@@ -1,0 +1,179 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "py-libp2p-overwatch"
+version = "0.1.0"
+description = "A Python libp2p overwatch node implementation"
+readme = "README.md"
+requires-python = ">=3.10, <4.0"
+license = "MIT AND Apache-2.0"
+keywords = ["libp2p", "p2p"]
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "libp2p @ git+https://github.com/libp2p/py-libp2p.git@main",
+    "substrate-interface @ git+https://github.com/hayotensor/py-polkadot-sdk.git@hypertensor",
+    "tenacity>=8.2.3",
+    "multiaddr==0.0.11",
+    "pymultihash==0.8.2",
+    "python-dotenv>=1.0.1",
+    "rocksdict>=0.3.27",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=0.9.0",
+    "bump_my_version>=0.19.0",
+    "ipython",
+    "mypy>=1.15.0",
+    "pre-commit>=3.4.0",
+    "tox>=4.0.0",
+    "twine",
+    "wheel",
+    "setuptools>=42",
+    "sphinx>=6.0.0",
+    "sphinx_rtd_theme>=1.0.0",
+    "towncrier>=24,<25",
+    "p2pclient==0.2.0",
+    "pytest>=7.0.0",
+    "pytest-xdist>=2.4.0",
+    "pytest-trio>=0.5.2",
+    "pytest-timeout>=2.4.0",
+    "pytest-rerunfailures>=12.0",
+    "factory-boy>=2.12.0,<3.0.0",
+    "ruff>=0.11.10",
+    "pyrefly (>=0.17.1,<0.18.0)",
+]
+docs = [
+    "sphinx>=6.0.0",
+    "sphinx_rtd_theme>=1.0.0",
+    "towncrier>=24,<25",
+    "tomli; python_version < '3.11'",
+]
+test = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-timeout>=2.4.0",
+    "pytest-trio>=0.5.2",
+    "pytest-xdist>=2.4.0",
+    "pytest-mock>=3.15.1",
+]
+
+[project.urls]
+Homepage = "https://github.com/hayotensor/py-libp2p-subnet"
+Documentation = "https://py-libp2p-subnet.readthedocs.io"
+Repository = "https://github.com/hayotensor/py-libp2p-subnet"
+Issues = "https://github.com/hayotensor/py-libp2p-subnet/issues"
+
+[project.scripts]
+run_node = "subnet.cli.run_node:main"
+run_bootnode = "subnet.cli.run_bootnode:main"
+run_bootnode_v2 = "subnet.cli.run_bootnode_v2:main"
+run_node_v2 = "subnet.cli.run_node_v2:main"
+run_kad_dht = "subnet.cli.run_kad_dht:main"
+keygen = "subnet.cli.crypto.keygen:main"
+keyview = "subnet.cli.crypto.keyview:main"
+register_subnet = "subnet.cli.hypertensor.subnet.register:main"
+activate_subnet = "subnet.cli.hypertensor.subnet.activate:main"
+register_node = "subnet.cli.hypertensor.node.register:main"
+
+[tool.setuptools]
+packages = ["subnet"]
+
+[tool.setuptools.package-data]
+subnet = ["py.typed"]
+
+[tool.pytest.ini_options]
+addopts = "-v --showlocals --durations 50 --maxfail 10"
+log_date_format = "%m-%d %H:%M:%S"
+log_format = "%(levelname)8s  %(asctime)s  %(filename)20s  %(message)s"
+markers = [
+    "slow: mark test as slow",
+    "flaky: mark test as flaky (may fail intermittently)",
+]
+xfail_strict = true
+
+[tool.ruff]
+line-length = 120
+exclude = ["__init__.py", "*_pb2*.py", "*.pyi"]
+
+[tool.ruff.lint]
+select = [
+    "F", # Pyflakes
+    "E", # pycodestyle errors
+    "W", # pycodestyle warnings
+    "I", # isort
+    "D", # pydocstyle
+]
+
+# Ignores from pydocstyle and any other desired ones
+ignore = [
+    "D100",
+    "D101",
+    "D102",
+    "D103",
+    "D105",
+    "D106",
+    "D107",
+    "D200",
+    "D203",
+    "D204",
+    "D205",
+    "D212",
+    "D400",
+    "D401",
+    "D412",
+    "D415",
+]
+
+[tool.ruff.lint.isort]
+force-wrap-aliases = true
+combine-as-imports = true
+extra-standard-library = []
+force-sort-within-sections = true
+known-first-party = ["subnet", "tests"]
+force-to-top = ["pytest"]
+
+[tool.ruff.format]
+# Using Ruff's Black-compatible formatter.
+# Options like quote-style = "double" or indent-style = "space" can be set here if needed.
+
+[tool.pyrefly]
+project_includes = ["subnet", "tests"]
+project_excludes = [
+    "**/.project-template/**",
+    "**/docs/conf.py",
+    "**/*pb2.py",
+    "**/*.pyi",
+    ".venv/**",
+    "./tests/interop/nim_libp2p",
+]
+
+[tool.mypy]
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_subclassing_any = false
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+incremental = false
+strict_equality = true
+strict_optional = true
+warn_redundant_casts = true
+warn_return_any = false
+warn_unused_configs = true
+warn_unused_ignores = false

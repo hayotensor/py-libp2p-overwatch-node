@@ -1,0 +1,16 @@
+syntax = "proto2";
+
+package mock_protocol.pb;
+
+message MockProtocolMessage {
+    enum MockProtocolMessageType {
+        TASK_REQUEST = 0;
+    }
+
+    message Peer {
+        required bytes id = 1;
+        repeated bytes addrs = 2;
+    }
+
+    required MockProtocolMessageType type = 1;
+}
