@@ -147,10 +147,9 @@ class OverwatchNode:
 
     async def run_commit_reveal(self, overwatch_epoch: int):
         logger.info(f"Starting Overwatch Epoch: {overwatch_epoch}")
-
-        try:
-            commits: List[OverwatchCommit] = []
-            for subnet_id in self.subnet_ids:
+        commits: List[OverwatchCommit] = []
+        for subnet_id in self.subnet_ids:
+            try:
                 # Ensure we haven't already ran this
                 # Check database to ensure we haven't already ran this subnet
                 # This is helpful between restarts
@@ -176,10 +175,13 @@ class OverwatchNode:
                     self.db.nmap_set(
                         "commits",
                         key=f"{overwatch_epoch}:{subnet_id}",
-                        value={"score": score, "commit_hash": commit_hash, "salt": salt},
+                        value={"weight": score, "commit_hash": commit_hash, "salt": salt},
                     )
+            except Exception as e:
+                logger.warning(f"Failed to commit subnet ID {subnet_id} for epoch {overwatch_epoch}: {e}")
 
-            # Commit
+        # Commit
+        try:
             if self.hypertensor is not None and len(commits) > 0:
                 logger.info(f"[Commit]: Committing weights for epoch {overwatch_epoch}")
 
@@ -191,10 +193,13 @@ class OverwatchNode:
                 self.hypertensor.commit_overwatch_subnet_weights(self.overwatch_node_id, commits)
             else:
                 logger.info("[Test]: skipping commit, already stored in database")
+        except Exception as e:
+            logger.warning(f"Failed to commit weights for epoch {overwatch_epoch}: {e}")
 
-            # Wait for reveal period
-            reveal_async_stop_event = trio.Event()
-            while not self.stop.is_set() and not reveal_async_stop_event.is_set():
+        # Wait for reveal period
+        reveal_async_stop_event = trio.Event()
+        while not self.stop.is_set() and not reveal_async_stop_event.is_set():
+            try:
                 # We iterate here to ensure client clock matches blockchain
                 epoch_data = self.hypertensor.get_overwatch_epoch_data()
                 seconds_remaining_until_reveal = epoch_data.seconds_remaining_until_reveal
@@ -202,44 +207,47 @@ class OverwatchNode:
                 if seconds_remaining_until_reveal == 0:
                     break
 
-                try:
-                    logger.info(
-                        f"[Reveal]: Waiting for reveal phase, sleeping for {seconds_remaining_until_reveal} seconds"
+                logger.info(
+                    f"[Reveal]: Waiting for reveal phase, sleeping for {seconds_remaining_until_reveal} seconds"
+                )
+                with trio.move_on_after(
+                    max(
+                        1.0,
+                        seconds_remaining_until_reveal,
                     )
-                    with trio.move_on_after(
-                        max(
-                            1.0,
-                            seconds_remaining_until_reveal,
-                        )
-                    ):
-                        await reveal_async_stop_event.wait()
-                        break
+                ):
+                    await reveal_async_stop_event.wait()
+                    break
 
-                    if reveal_async_stop_event.is_set():
-                        break
-                except Exception as e:
-                    logger.warning(f"Failed to wait for reveal phase: {e}", exc_info=True)
-                    pass
+                if reveal_async_stop_event.is_set():
+                    break
+            except Exception as e:
+                logger.warning(f"Failed to wait for reveal phase: {e}", exc_info=True)
+                pass
 
-            reveals: List[OverwatchReveals] = []
-            for subnet_id in self.subnet_ids:
-                # entry = self.db.get_nested(overwatch_epoch, subnet_id)
-                # if entry is None:
-                #     continue
-
+        reveals: List[OverwatchReveals] = []
+        for subnet_id in self.subnet_ids:
+            try:
                 commit = self.db.nmap_get("commits", key=f"{overwatch_epoch}:{subnet_id}")
-                logger.info(f"Commit for subnet ID {subnet_id}: {commit}")
                 if commit is None:
+                    logger.info(f"Commit for subnet ID {subnet_id} not found")
                     continue
 
-                weight = commit["weight"]
-                salt = commit["salt"]
+                weight = commit.get("weight")
+                salt = commit.get("salt")
+
+                if weight is None or salt is None:
+                    logger.info(f"Commit for subnet ID {subnet_id} is missing weight or salt: {commit}")
+                    continue
 
                 logger.info(f"[Reveal]: Weight: {weight} Salt: {salt}")
 
                 reveals.append(OverwatchReveals(subnet_id=subnet_id, weight=weight, salt=salt))
+            except Exception as e:
+                logger.warning(f"Failed to reveal subnet ID {subnet_id} for epoch {overwatch_epoch}: {e}")
 
-            if self.hypertensor is not None:
+        try:
+            if self.hypertensor is not None and len(reveals) > 0:
                 logger.info(f"[Reveal]: Revealing weights for epoch {overwatch_epoch}")
 
                 reveals = [asdict(r) for r in reveals]
@@ -248,8 +256,7 @@ class OverwatchNode:
             else:
                 logger.info("[Test]: skipping reveal")
         except Exception as e:
-            logger.warning(e, exc_info=True)
-            await trio.sleep(6.0)
+            logger.warning(f"Failed to reveal weights for epoch {overwatch_epoch}: {e}")
 
     async def _get_subnet_slot(self, subnet_id: int) -> int | None:
         if self.slots.get(subnet_id) is None or self.slots.get(subnet_id) == "None":  # noqa: E711
