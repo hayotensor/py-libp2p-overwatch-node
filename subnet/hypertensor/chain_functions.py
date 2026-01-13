@@ -20,6 +20,7 @@ from subnet.hypertensor.chain_data import (
     ConsensusData,
     DelegateStakeInfo,
     NodeDelegateStakeInfo,
+    OverwatchNodeInfo,
     SubnetData,
     SubnetInfo,
     SubnetNode,
@@ -77,6 +78,7 @@ class OverwatchEpochData:
     seconds_elapsed: int
     seconds_remaining: int
     seconds_remaining_until_reveal: int
+    epoch_cutoff_block: int
 
     @staticmethod
     def zero(current_block: int, epoch_length: int) -> "OverwatchEpochData":
@@ -92,6 +94,7 @@ class OverwatchEpochData:
             seconds_elapsed=0,
             seconds_remaining=epoch_length * BLOCK_SECS,
             seconds_remaining_until_reveal=0,
+            epoch_cutoff_block=0,
         )
 
 
@@ -297,8 +300,14 @@ class Hypertensor:
             data = element_count_compact.data
 
             # Force key/value map types
-            self.map_key = "[u8; 20]"
-            self.map_value = "u32"
+            if value[0][0].startswith("0x"):
+                # initial_coldkeys
+                self.map_key = "[u8; 20]"
+                self.map_value = "u32"
+            else:
+                # bootnodes
+                self.map_key = "Vec<u8>"
+                self.map_value = "Vec<u8>"
 
             for item_key, item_value in value:
                 key_obj = self.runtime_config.create_scale_object(type_string=self.map_key, metadata=self.metadata)
@@ -1034,72 +1043,6 @@ class Hypertensor:
 
         return submit_extrinsic()
 
-    def commit_overwatch_subnet_weights(self, overwatch_node_id: int, scores: Any) -> ExtrinsicReceipt:
-        """
-        Remove a subnet
-
-        :param self.keypair: self.keypair of extrinsic caller. Must be a subnet_node in the subnet
-        :param subnet_id: subnet ID
-        """
-        call = self.interface.compose_call(
-            call_module="Network",
-            call_function="commit_overwatch_subnet_weights",
-            call_params={"overwatch_node_id": overwatch_node_id, "commit_weights": scores},
-        )
-
-        extrinsic = self.interface.create_signed_extrinsic(call=call, keypair=self.keypair)
-
-        @retry(wait=wait_fixed(BLOCK_SECS + 1), stop=stop_after_attempt(4))
-        def submit_extrinsic():
-            try:
-                with self.interface as _interface:
-                    receipt = _interface.submit_extrinsic(extrinsic, wait_for_inclusion=True)
-                    if receipt.is_success:
-                        print("✅ Success, triggered events:")
-                        for event in receipt.triggered_events:
-                            print(f"* {event.value}")
-                    else:
-                        print("⚠️ Extrinsic Failed: ", receipt.error_message)
-
-                    return receipt
-            except SubstrateRequestException as e:
-                print("Failed to send: {}".format(e))
-
-        return submit_extrinsic()
-
-    def reveal_overwatch_subnet_weights(self, overwatch_node_id: int, reveals) -> ExtrinsicReceipt:
-        """
-        Remove a subnet
-
-        :param self.keypair: self.keypair of extrinsic caller. Must be a subnet_node in the subnet
-        :param subnet_id: subnet ID
-        """
-        call = self.interface.compose_call(
-            call_module="Network",
-            call_function="reveal_overwatch_subnet_weights",
-            call_params={"overwatch_node_id": overwatch_node_id, "reveals": reveals},
-        )
-
-        extrinsic = self.interface.create_signed_extrinsic(call=call, keypair=self.keypair)
-
-        @retry(wait=wait_fixed(BLOCK_SECS + 1), stop=stop_after_attempt(4))
-        def submit_extrinsic():
-            try:
-                with self.interface as _interface:
-                    receipt = _interface.submit_extrinsic(extrinsic, wait_for_inclusion=True)
-                    if receipt.is_success:
-                        print("✅ Success, triggered events:")
-                        for event in receipt.triggered_events:
-                            print(f"* {event.value}")
-                    else:
-                        print("⚠️ Extrinsic Failed: ", receipt.error_message)
-
-                    return receipt
-            except SubstrateRequestException as e:
-                print("Failed to send: {}".format(e))
-
-        return submit_extrinsic()
-
     def set_overwatch_node_peer_id(self, subnet_id: int, overwatch_node_id: int, peer_id: str):
         """
         Updates hotkey using coldkey
@@ -1130,6 +1073,80 @@ class Hypertensor:
                     extrinsic = _interface.create_signed_extrinsic(call=call, keypair=self.keypair, nonce=nonce)
 
                     receipt = _interface.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+                    return receipt
+            except SubstrateRequestException as e:
+                print("Failed to send: {}".format(e))
+
+        return submit_extrinsic()
+
+    def commit_overwatch_subnet_weights(
+        self,
+        overwatch_node_id: int,
+        commit_weights: Any,
+    ):
+        # compose call
+        call = self.interface.compose_call(
+            call_module="Network",
+            call_function="commit_overwatch_subnet_weights",
+            call_params={
+                "overwatch_node_id": overwatch_node_id,
+                "commit_weights": commit_weights,
+            },
+        )
+
+        @retry(wait=wait_fixed(BLOCK_SECS + 1), stop=stop_after_attempt(4))
+        def submit_extrinsic():
+            try:
+                with self.interface as _interface:
+                    # get none on retries
+                    nonce = _interface.get_account_nonce(self.keypair.ss58_address)
+
+                    # create signed extrinsic
+                    extrinsic = _interface.create_signed_extrinsic(call=call, keypair=self.keypair, nonce=nonce)
+
+                    receipt = _interface.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+                    if receipt.is_success:
+                        print("✅ Extrinsic Success")
+                    else:
+                        logger.error(f"⚠️ Extrinsic Failed: {receipt.error_message}")
+
+                    return receipt
+            except SubstrateRequestException as e:
+                print("Failed to send: {}".format(e))
+
+        return submit_extrinsic()
+
+    def reveal_overwatch_subnet_weights(
+        self,
+        overwatch_node_id: int,
+        reveals: Any,
+    ):
+        # compose call
+        call = self.interface.compose_call(
+            call_module="Network",
+            call_function="reveal_overwatch_subnet_weights",
+            call_params={
+                "overwatch_node_id": overwatch_node_id,
+                "reveals": reveals,
+            },
+        )
+
+        @retry(wait=wait_fixed(BLOCK_SECS + 1), stop=stop_after_attempt(4))
+        def submit_extrinsic():
+            try:
+                with self.interface as _interface:
+                    # get none on retries
+                    nonce = _interface.get_account_nonce(self.keypair.ss58_address)
+
+                    # create signed extrinsic
+                    extrinsic = _interface.create_signed_extrinsic(call=call, keypair=self.keypair, nonce=nonce)
+
+                    receipt = _interface.submit_extrinsic(extrinsic, wait_for_inclusion=True)
+                    if receipt.is_success:
+                        print("✅ Extrinsic Success")
+                    else:
+                        logger.error(f"⚠️ Extrinsic Failed: {receipt.error_message}")
+
                     return receipt
             except SubstrateRequestException as e:
                 print("Failed to send: {}".format(e))
@@ -1934,6 +1951,43 @@ class Hypertensor:
 
         return make_rpc_request()
 
+    def get_overwatch_node_info(
+        self,
+        overwatch_node_id: int,
+    ):
+        @retry(wait=wait_fixed(BLOCK_SECS + 1), stop=stop_after_attempt(4))
+        def make_rpc_request():
+            try:
+                with self.interface as _interface:
+                    data = _interface.rpc_request(
+                        method="network_getOverwatchNodeInfo",
+                        params=[
+                            overwatch_node_id,
+                        ],
+                    )
+                    return data
+            except SubstrateRequestException as e:
+                logger.error("Failed to get rpc request: {}".format(e))
+
+        return make_rpc_request()
+
+    def get_all_overwatch_nodes_info(
+        self,
+    ):
+        @retry(wait=wait_fixed(BLOCK_SECS + 1), stop=stop_after_attempt(4))
+        def make_rpc_request():
+            try:
+                with self.interface as _interface:
+                    data = _interface.rpc_request(
+                        method="network_getAllOverwatchNodesInfo",
+                        params=[],
+                    )
+                    return data
+            except SubstrateRequestException as e:
+                logger.error("Failed to get rpc request: {}".format(e))
+
+        return make_rpc_request()
+
     """
   Events
   """
@@ -1965,7 +2019,7 @@ class Hypertensor:
                                 break
                     return data
             except SubstrateRequestException as e:
-                logger.error("Failed to get rpc request: {}".format(e))
+                logger.error("Failed to get event request: {}".format(e))
 
         return make_event_query()
 
@@ -2024,7 +2078,7 @@ class Hypertensor:
             seconds_remaining=seconds_remaining,
         )
 
-    def get_overwatch_epoch_data(self) -> EpochData:
+    def get_overwatch_epoch_data(self) -> OverwatchEpochData:
         current_block = self.get_block_number()
         epoch_length = self.get_epoch_length()
         current_block = int(str(current_block))
@@ -2037,16 +2091,17 @@ class Hypertensor:
         seconds_remaining = blocks_remaining * BLOCK_SECS
 
         multiplier = self.get_overwatch_epoch_multiplier()
+        multiplier = int(str(multiplier))
         overwatch_epoch_length = epoch_length * multiplier
         overwatch_epoch = current_block // overwatch_epoch_length
-        cutoff_percentage = float(self.get_overwatch_commit_cutoff_percent() / 1e18)
+        cutoff_percentage = float(int(str(self.get_overwatch_commit_cutoff_percent())) / 1e18)
         block_increase_cutoff = overwatch_epoch_length * cutoff_percentage
-        epoch_cutoff_block = overwatch_epoch_length * epoch + block_increase_cutoff
+        epoch_cutoff_block = overwatch_epoch_length * overwatch_epoch + block_increase_cutoff
 
         if current_block > epoch_cutoff_block:
             seconds_remaining_until_reveal = 0
         else:
-            seconds_remaining_until_reveal = epoch_cutoff_block - current_block
+            seconds_remaining_until_reveal = (epoch_cutoff_block - current_block) * BLOCK_SECS
 
         return OverwatchEpochData(
             block=current_block,
@@ -2060,15 +2115,17 @@ class Hypertensor:
             seconds_elapsed=seconds_elapsed,
             seconds_remaining=seconds_remaining,
             seconds_remaining_until_reveal=seconds_remaining_until_reveal,
+            epoch_cutoff_block=epoch_cutoff_block,
         )
 
     def in_overwatch_commit_period(self) -> bool:
         epoch_data = self.get_epoch_data()
         epoch_length = epoch_data.block_per_epoch
         multiplier = self.get_overwatch_epoch_multiplier()
+        multiplier = int(str(multiplier))
         overwatch_epoch_length = epoch_length * multiplier
         current_epoch = epoch_data.epoch
-        cutoff_percentage = float(self.get_overwatch_commit_cutoff_percent() / 1e18)
+        cutoff_percentage = float(int(str(self.get_overwatch_commit_cutoff_percent())) / 1e18)
         block_increase_cutoff = overwatch_epoch_length * cutoff_percentage
         epoch_cutoff_block = overwatch_epoch_length * current_epoch + block_increase_cutoff
         return epoch_data.block < epoch_cutoff_block
@@ -2346,24 +2403,6 @@ class Hypertensor:
             logger.error(f"Error get_min_class_subnet_nodes_formatted={e}", exc_info=True)
             return []
 
-    # def get_subnet_node_info_formatted(self, subnet_id: int, subnet_node_id: int) -> Optional["SubnetNodeInfo"]:
-    #     """
-    #     Get formatted list of subnet nodes classified as Validator
-
-    #     :param subnet_id: subnet ID
-
-    #     :returns: List of subnet node IDs
-    #     """
-    #     try:
-    #         result = self.get_subnet_node_info(subnet_id, subnet_node_id)
-
-    #         subnet_node = SubnetNodeInfo.from_vec_u8(result["result"])
-
-    #         return subnet_node
-    #     except Exception as e:
-    #         logger.error(f"Error get_subnet_node_data_formatted={e}", exc_info=True)
-    #         return None
-
     def update_bootnodes(
         self,
         subnet_id: int,
@@ -2421,3 +2460,30 @@ class Hypertensor:
                 logger.error("Failed to get rpc request: {}".format(e))
 
         return make_query()
+
+    def get_overwatch_node_info_formatted(self, overwatch_node_id: int) -> Optional["OverwatchNodeInfo"]:
+        """
+        Get formatted list of Overwatch nodes
+
+        :param overwatch_node_id: Overwatch node ID
+
+        :returns: Overwatch node info
+        """
+        try:
+            result = self.get_overwatch_node_info(overwatch_node_id)
+
+            overwatch_node_info = OverwatchNodeInfo.from_vec_u8(result["result"])
+
+            return overwatch_node_info
+        except Exception:
+            return None
+
+    def get_all_overwatch_nodes_info_formatted(self) -> Optional[List["OverwatchNodeInfo"]]:
+        try:
+            result = self.get_all_overwatch_nodes_info()
+
+            overwatch_nodes_info = OverwatchNodeInfo.list_from_vec_u8(result["result"])
+
+            return overwatch_nodes_info
+        except Exception:
+            return None

@@ -43,14 +43,20 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-# Run locally with no RPC connection
-
-# Start bootnode (or start bootnode through `run_bootnode`)
+# Run locally with no RPC connection after starting subnet network
 
 python -m subnet.cli.run_node \
 --private_key_path overwatch.key \
 --overwatch_node_id 1 \
 --no_blockchain_rpc
+
+# Run with faiths hotkey
+
+python -m subnet.cli.run_node \
+--private_key_path overwatch.key \
+--overwatch_node_id 1 \
+--local_rpc \
+--tensor_private_key 0x1dd4fd336c448379240f5e0ce4a57d574481c9981260e036f3877af6b663c927
 
         """,
     )
@@ -115,9 +121,6 @@ def main() -> None:
     else:
         logging.getLogger().setLevel(logging.INFO)
 
-    # Log startup information
-    logger.info("Starting libp2p subnet server node...")
-
     # port = args.port
     # if port <= 0:
     #     port = random.randint(10000, 60000)
@@ -181,10 +184,10 @@ def main() -> None:
     try:
         # By default, each subnet we enter uses the same keypair/peer ID and is differentiated by port
         node = OverwatchNode(
-            base_port=41330,
             key_pair=key_pair,
             db=db,
-            overwatch_node_id=0,
+            overwatch_node_id=args.overwatch_node_id,
+            base_port=31345,
             hypertensor=hypertensor,
         )
         trio.run(node.run)

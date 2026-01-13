@@ -44,12 +44,12 @@ async def maintain_connections(
     while True:
         try:
             onchain_peer_ids = await subnet_info_tracker.get_all_peer_ids(force=True)
-            logger.info(f"All peer IDs: {onchain_peer_ids}")
+            logger.debug(f"All peer IDs: {onchain_peer_ids}")
 
             connected_peers = host.get_connected_peers()
             list_peers = host.get_peerstore().peers_with_addrs()
 
-            logger.info(f"Connected peers: {connected_peers}")
+            logger.debug(f"Connected peers: {connected_peers}")
 
             if dht:
                 peerstore_peer_ids = dht.host.get_peerstore().peer_ids()
@@ -121,7 +121,7 @@ async def maintain_connections(
 
                 # for peer_id in mesh_peers:
                 #     if peer_id not in connected_peers:
-                #         logger.info(f"Pruning disconnected peer {peer_id} from gossipsub mesh")
+                #         logger.debug(f"Pruning disconnected peer {peer_id} from gossipsub mesh")
                 #         gossipsub.remove_peer(peer_id)
 
                 ###
@@ -247,7 +247,7 @@ async def disconnect_peers(
         # Remove from host
         try:
             await host.disconnect(peer_id)
-            logger.info(
+            logger.debug(
                 f"Disconnected peer {peer_id} because they are no longer registered on-chain"  # noqa: E501
             )
 
@@ -281,9 +281,9 @@ async def disconnect_peers(
 async def demonstrate_random_walk_discovery(dht: KadDHT, interval: int = 30) -> None:
     """Demonstrate Random Walk peer discovery with periodic statistics."""
     while True:
-        logger.info(f"Routing table size: {dht.get_routing_table_size()}")
-        logger.info(f"Connected peers: {len(dht.host.get_connected_peers())}")
-        logger.info(f"Peerstore size: {len(dht.host.get_peerstore().peer_ids())}")
+        logger.debug(f"Routing table size: {dht.get_routing_table_size()}")
+        logger.debug(f"Connected peers: {len(dht.host.get_connected_peers())}")
+        logger.debug(f"Peerstore size: {len(dht.host.get_peerstore().peer_ids())}")
 
         if dht.get_routing_table_size() > 0:
             logger.debug("Peers in routing table:")

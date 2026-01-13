@@ -68,7 +68,7 @@ custom_rpc_type_registry = {
                 ["validator_absent_subnet_node_reputation_factor", "u128"],
                 ["validator_non_consensus_subnet_node_reputation_factor", "u128"],
                 ["bootnode_access", "BTreeSet<[u8; 20]>"],
-                ["bootnodes", "BTreeSet<BoundedVec<u8, DefaultMaxVectorLength>>"],
+                ["bootnodes", "BTreeMap<PeerId, BoundedVec<u8, DefaultMaxVectorLength>>"],
                 ["total_nodes", "u32"],
                 ["total_active_nodes", "u32"],
                 ["total_electable_nodes", "u32"],
@@ -243,7 +243,7 @@ custom_rpc_type_registry = {
         "AllSubnetBootnodes": {
             "type": "struct",
             "type_mapping": [
-                ["bootnodes", "BTreeMap<PeerId, BoundedVec<u8, DefaultMaxVectorLength>>"],
+                ["subnet_bootnodes", "BTreeMap<PeerId, BoundedVec<u8, DefaultMaxVectorLength>>"],
                 ["node_bootnodes", "BTreeMap<PeerId, Option<BoundedVec<u8, DefaultMaxVectorLength>>>"],
                 ["registered_bootnodes", "BTreeMap<PeerId, Option<BoundedVec<u8, DefaultMaxVectorLength>>>"],
             ],
@@ -312,7 +312,7 @@ custom_rpc_type_registry = {
         "BTreeMap<[u8; 20], u32>": "Vec<([u8; 20], u32)>",
         "BTreeMap<AccountId20, u32>": "Vec<([u8; 20], u32)>",
         "BTreeMap<PeerId, BoundedVec<u8, DefaultMaxVectorLength>>": "Vec<(Vec<u8>, Vec<u8>)>",
-        "BTreeMap<PeerId, Option<BoundedVec<u8, DefaultMaxVectorLength>>>": "BTreeMap<PeerId, BoundedVec<u8, DefaultMaxVectorLength>>",  # noqa: E501
+        "BTreeMap<PeerId, Option<BoundedVec<u8, DefaultMaxVectorLength>>>": "Vec<(Vec<u8>, Option<Vec<u8>>)>",
         "BTreeMap<u32, PeerId>": "Vec<(u32, Vec<u8>)>",
     }
 }

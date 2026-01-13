@@ -129,7 +129,7 @@ class GossipReceiver:
 
     async def _handle_heartbeat(self, message: rpc_pb2.Message, from_peer: str) -> None:
         """Store heartbeat message if not already stored for this epoch."""
-        overwatch_epoch = self.hypertensor.get_overwatch_epoch_data().epoch
+        overwatch_epoch = self.hypertensor.get_overwatch_epoch_data().overwatch_epoch
 
         heartbeat_data = HeartbeatData.from_json(message.data.decode("utf-8"))
         subnet_id = heartbeat_data.subnet_id
@@ -147,7 +147,6 @@ class GossipReceiver:
 
         # Store each subnet heartbeat in a separate namespace "heartbeat:1:1"
         nmap = get_nmap(subnet_id, overwatch_epoch)
-        logger.info(f"Storing heartbeat under nmap: {nmap}, key: {key}")
 
         # Fast in-memory check
         if key in self._seen_heartbeats:

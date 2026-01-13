@@ -23,16 +23,16 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[logging.StreamHandler()],
 )
-logger = logging.getLogger("server/1.0.0")
+logger = logging.getLogger("overwatch-node/1.0.0")
 
 
 class OverwatchNode:
     def __init__(
         self,
-        base_port: int,
         key_pair: KeyPair,
         db: RocksDB,
         overwatch_node_id: int,
+        base_port: int = 31330,
         hypertensor: Optional[Hypertensor | LocalMockHypertensor] = None,
         **kwargs,
     ):
@@ -133,23 +133,26 @@ class OverwatchNode:
                         )
                     ):
                         await self._async_stop_event.wait()
+                        logger.info("Starting next epoch")
                         break
 
                     if self._async_stop_event.is_set():
+                        logger.info("Shutting down overwatch node")
                         break
 
                     pass  # Timeout reached
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"Timeout reached: {e}", exc_info=True)
                     pass
             except Exception as e:
-                logger.warning(e, exc_info=True)
+                logger.warning(f"Error waiting for next epoch: {e}", exc_info=True)
                 await trio.sleep(6.0)
 
     async def run_commit_reveal(self, overwatch_epoch: int):
-        logger.info(f"Starting Overwatch Epoch: {overwatch_epoch}")
         commits: List[OverwatchCommit] = []
         for subnet_id in self.subnet_ids:
             try:
+                logger.info(f"Processing subnet ID {subnet_id} for epoch {overwatch_epoch}")
                 # Ensure we haven't already ran this
                 # Check database to ensure we haven't already ran this subnet
                 # This is helpful between restarts
@@ -170,8 +173,6 @@ class OverwatchNode:
                     )
 
                     commits.append(OverwatchCommit(subnet_id=subnet_id, weight=commit_hash))
-                    # self.db.save_entry(overwatch_epoch, subnet_id, score, commit_hash, salt)
-
                     self.db.nmap_set(
                         "commits",
                         key=f"{overwatch_epoch}:{subnet_id}",
@@ -182,17 +183,9 @@ class OverwatchNode:
 
         # Commit
         try:
-            if self.hypertensor is not None and len(commits) > 0:
-                logger.info(f"[Commit]: Committing weights for epoch {overwatch_epoch}")
-
-                commits = [asdict(c) for c in commits]
-
-                # Check no commit yet
-
-                # Commit
-                self.hypertensor.commit_overwatch_subnet_weights(self.overwatch_node_id, commits)
-            else:
-                logger.info("[Test]: skipping commit, already stored in database")
+            logger.info(f"[Commit]: Committing weights for epoch {overwatch_epoch}")
+            commits = [asdict(c) for c in commits]
+            self.hypertensor.commit_overwatch_subnet_weights(self.overwatch_node_id, commits)
         except Exception as e:
             logger.warning(f"Failed to commit weights for epoch {overwatch_epoch}: {e}")
 
@@ -202,13 +195,20 @@ class OverwatchNode:
             try:
                 # We iterate here to ensure client clock matches blockchain
                 epoch_data = self.hypertensor.get_overwatch_epoch_data()
+                if epoch_data.overwatch_epoch > overwatch_epoch:
+                    logger.info(
+                        f"Epoch {overwatch_epoch} has completed, current epoch is {epoch_data.overwatch_epoch}, moving on"
+                    )
+                    break
+
                 seconds_remaining_until_reveal = epoch_data.seconds_remaining_until_reveal
 
                 if seconds_remaining_until_reveal == 0:
                     break
 
                 logger.info(
-                    f"[Reveal]: Waiting for reveal phase, sleeping for {seconds_remaining_until_reveal} seconds"
+                    f"[Reveal]: Current block is {epoch_data.block}, epoch cutoff block is {epoch_data.epoch_cutoff_block}"
+                    f"Sleeping for {seconds_remaining_until_reveal} seconds"
                 )
                 with trio.move_on_after(
                     max(
@@ -224,6 +224,13 @@ class OverwatchNode:
             except Exception as e:
                 logger.warning(f"Failed to wait for reveal phase: {e}", exc_info=True)
                 pass
+
+        epoch_data = self.hypertensor.get_overwatch_epoch_data()
+        if epoch_data.overwatch_epoch > overwatch_epoch:
+            logger.info(
+                f"Epoch {overwatch_epoch} has completed, current epoch is {epoch_data.overwatch_epoch}, moving on"
+            )
+            return
 
         reveals: List[OverwatchReveals] = []
         for subnet_id in self.subnet_ids:
@@ -247,14 +254,9 @@ class OverwatchNode:
                 logger.warning(f"Failed to reveal subnet ID {subnet_id} for epoch {overwatch_epoch}: {e}")
 
         try:
-            if self.hypertensor is not None and len(reveals) > 0:
-                logger.info(f"[Reveal]: Revealing weights for epoch {overwatch_epoch}")
-
-                reveals = [asdict(r) for r in reveals]
-
-                self.hypertensor.reveal_overwatch_subnet_weights(self.overwatch_node_id, reveals)
-            else:
-                logger.info("[Test]: skipping reveal")
+            logger.info(f"[Reveal]: Revealing weights for epoch {overwatch_epoch}")
+            reveals = [asdict(r) for r in reveals]
+            self.hypertensor.reveal_overwatch_subnet_weights(self.overwatch_node_id, reveals)
         except Exception as e:
             logger.warning(f"Failed to reveal weights for epoch {overwatch_epoch}: {e}")
 
@@ -276,7 +278,7 @@ class OverwatchNode:
             logger.info(f"Getting heartbeats under nmap key: {nmap}")
             entries = self.db.nmap_get_all(nmap)
             logger.info(f"Entries for subnet {subnet_id}: {entries}")
-            if entries is None:
+            if entries is None or entries == {}:
                 return None
 
             slot = await self._get_subnet_slot(subnet_id)
@@ -289,9 +291,6 @@ class OverwatchNode:
                 subnet_id, subnet_epoch, SubnetNodeClass.Included
             )
 
-            # expected_peer_ids = [node.peer_id for node in validator_nodes]
-            # expected_subnet_node_ids = [node.subnet_node_id for node in validator_nodes]
-
             total_nodes = len(validator_nodes)
 
             if total_nodes == 0:
@@ -301,58 +300,28 @@ class OverwatchNode:
             for validator in validator_nodes:
                 subnet_node_id = validator.subnet_node_id
                 peer_id = PeerID.from_base58(validator.peer_id)
+                logger.info(f"Processing peer ID {peer_id} for subnet node ID {subnet_node_id}")
                 entry_key, entry_value = self.find_entry(entries, subnet_id, subnet_node_id)
-                print(f"entry_key: {entry_key} for subnet_node_id: {subnet_node_id}")
-                print(f"entry_value: {entry_value} for subnet_node_id: {subnet_node_id}")
+                logger.info(f"entry_key: {entry_key} for subnet_node_id: {subnet_node_id}")
+                logger.info(f"entry_value: {entry_value} for subnet_node_id: {subnet_node_id}")
                 if entry_key is None or entry_value is None:
+                    logger.debug(f"Entry for subnet node ID {subnet_node_id} not found")
                     if peer_id is None:
                         continue
 
                     subnet_server = self.servers.get(subnet_id)
                     if subnet_server is None or subnet_server.host is None or subnet_server.dht is None:
                         continue
+
+                    logger.debug(f"Pinging peer ID {peer_id}")
                     ping_protocol = PingProtocol(subnet_server.host, subnet_server.dht)
 
                     success = await ping_protocol.ping(peer_id)
-                    print(f"Ping result: {success}")
+                    logger.debug(f"Ping result: {success}")
                     if success:
                         successful_validations += 1
                 else:
                     successful_validations += 1
-
-            # for subnet_node_id in expected_subnet_node_ids:
-            #     entry_key, entry_value = self.find_entry(entries, subnet_id, subnet_node_id)
-            #     print(f"entry_key: {entry_key} for subnet_node_id: {subnet_node_id}")
-            #     print(f"entry_value: {entry_value} for subnet_node_id: {subnet_node_id}")
-            #     if entry_key is None or entry_value is None:
-            #         peer_id = self.find_peer_id_from_heartbeat(entry_value, subnet_id, subnet_node_id)
-            #         print(f"Pinging peer_id: {peer_id}")
-            #         if peer_id is None:
-            #             continue
-
-            #         subnet_server = self.servers.get(subnet_id)
-            #         if subnet_server is None:
-            #             continue
-            #         ping_protocol = PingProtocol(subnet_server.host, subnet_server.dht)
-
-            #         success = await ping_protocol.ping(peer_id)
-            #         print(f"Ping result: {success}")
-            #         if success:
-            #             successful_validations += 1
-            #     else:
-            #         successful_validations += 1
-
-            # if subnet_node_id in any([entry["subnet_node_id"] for entry in entries]):
-            #     successful_validations += 1
-            # else:
-            #     subnet_server = self.servers.get(subnet_id)
-            #     if subnet_server is None:
-            #         continue
-            #     ping_protocol = PingProtocol(subnet_server.host, subnet_server.dht)
-
-            #     success = await ping_protocol.ping(peer_id)
-            #     if success:
-            #         successful_validations += 1
 
             success_rate = successful_validations / total_nodes
             logger.info(f"Heartbeat success rate is {success_rate}")

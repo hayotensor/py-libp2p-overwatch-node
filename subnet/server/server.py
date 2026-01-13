@@ -207,12 +207,14 @@ class Server:
                         # Connect to bootstrap nodes AFTER starting services
                         # This avoids AttributeError on incoming streams
                         if not self.bootstrap_addrs:
-                            self.bootstrap_addrs = [
-                                self.hypertensor.get_bootnodes_formatted(self.subnet_id).subnet_bootnodes[0][1]
-                            ]
+                            bootnodes = self.hypertensor.get_bootnodes_formatted(self.subnet_id)
+                            subnet_bootnodes = bootnodes.subnet_bootnodes
+                            self.bootstrap_addrs = [bootnode[1] for bootnode in subnet_bootnodes]
                             print("Bootstrap addresses: ", self.bootstrap_addrs)
-                        if self.bootstrap_addrs is not None:
+                        if self.bootstrap_addrs is not None and len(self.bootstrap_addrs) > 0:
                             await connect_to_bootstrap_nodes(self.host, self.bootstrap_addrs)
+                        else:
+                            logger.warning(f"No bootstrap addresses found for subnet ID {self.subnet_id}.")
 
                         optimal_addr = get_optimal_binding_address(self.port)
                         optimal_addr_with_peer = f"{optimal_addr}/p2p/{self.host.get_id().to_string()}"

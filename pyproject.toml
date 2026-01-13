@@ -88,6 +88,8 @@ keyview = "subnet.cli.crypto.keyview:main"
 register_subnet = "subnet.cli.hypertensor.subnet.register:main"
 activate_subnet = "subnet.cli.hypertensor.subnet.activate:main"
 register_node = "subnet.cli.hypertensor.node.register:main"
+register-overwatch-node = "subnet.cli.hypertensor.overwatch.register:main"
+set-overwatch-node-peer = "subnet.cli.hypertensor.overwatch.set_peer:main"
 
 [tool.setuptools]
 packages = ["subnet"]

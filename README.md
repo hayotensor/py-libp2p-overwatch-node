@@ -74,6 +74,33 @@ See [subnet-template](https://github.com/hayotensor/py-libp2p-subnet) for regist
 
 #### Register Overwatch Node
 
+```bash
+register-overwatch-node \
+--hotkey 0xD4eb2503fA9F447CCa7b78D9a86F2fdbc964401e \
+--stake_to_be_added 100.00 \
+--private_key 0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133 \
+--local_rpc
+```
+
+#### Register Peer ID (to subnet)
+
+```bash
+set-overwatch-node-peer \
+--subnet_id 1 \
+--overwatch_node_id 1 \
+--peer_id 12D3KooWHNjWMaBA4eW4KyrzPfduh6e7CQ91iqXfZ69ZLSNW1m6Q \
+--private_key 0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133 \
+--local_rpc
+```
+
+#### Start Overwatch Node
+
+```bash
+python -m subnet.cli.run_node \
+--private_key_path overwatch.key \
+--overwatch_node_id 1 \
+--local_rpc
+```
 
 ### Code Quality
 

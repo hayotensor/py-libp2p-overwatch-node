@@ -22,12 +22,12 @@ logger = logging.getLogger(__name__)
 """
 [Local RPC Testing]
 
-Alith coldkey
-Faith hotkey
+Faith (register with Faith hotkey, overwatch.key peer ID):
 
-register-overwatch-node \
---hotkey 0xD4eb2503fA9F447CCa7b78D9a86F2fdbc964401e \
---stake_to_be_added 100.00 \
+set-overwatch-node-peer \
+--subnet_id 1 \
+--overwatch_node_id 1 \
+--peer_id 12D3KooWHNjWMaBA4eW4KyrzPfduh6e7CQ91iqXfZ69ZLSNW1m6Q \
 --private_key 0x5fb92d6e98884f76de468fa3f6278f8807c48bebc13595d45af5bdc4da702133 \
 --local_rpc
 
@@ -36,8 +36,14 @@ register-overwatch-node \
 
 def main():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--hotkey", type=str, required=True, help="Hotkey responsible for subnet features. ")
-    parser.add_argument("--stake_to_be_added", type=float, required=True, help="Amount of stake to be added as float")
+    parser.add_argument("--subnet_id", type=str, required=True, help="Subnet ID stored on blockchain. ")
+    parser.add_argument(
+        "--overwatch_node_id",
+        type=int,
+        default=0,
+        help="Overwatch node ID this node belongs to. ",
+    )
+    parser.add_argument("--peer_id", type=str, required=True, help="Peer ID generated using `keygen`")
     parser.add_argument("--local_rpc", action="store_true", help="[Testing] Run in local RPC mode, uses LOCAL_RPC")
     parser.add_argument(
         "--phrase",
@@ -64,13 +70,11 @@ def main():
     else:
         hypertensor = Hypertensor(rpc, PHRASE)
 
-    # hotkey = hypertensor.keypair.ss58_address
-    stake_to_be_added = int(args.stake_to_be_added * 1e18)
-
     try:
-        receipt = hypertensor.register_overwatch_node(
-            args.hotkey,
-            stake_to_be_added,
+        receipt = hypertensor.set_overwatch_node_peer_id(
+            args.subnet_id,
+            args.overwatch_node_id,
+            args.peer_id,
         )
         if receipt.is_success:
             logger.info("✅ Success, triggered events:")
